@@ -21,6 +21,7 @@ A production-ready AI chatbot for JobTread users, powered by Claude with web sea
 ### Option 2: Manual Deploy
 
 1. **Push to GitHub**
+
    ```bash
    git init
    git add .
