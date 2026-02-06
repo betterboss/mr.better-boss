@@ -1,4 +1,4 @@
-import { JOBTREAD_GRAPHQL_URL } from './constants';
+import { JOBTREAD_API_URL } from './constants';
 
 export interface JobTreadConfig {
   apiKey: string;
@@ -65,7 +65,7 @@ export class JobTreadClient {
   private async query(graphqlQuery: string, variables?: Record<string, unknown>) {
     let response: Response;
     try {
-      response = await fetch(JOBTREAD_GRAPHQL_URL, {
+      response = await fetch(JOBTREAD_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -79,7 +79,7 @@ export class JobTreadClient {
     }
 
     if (!response.ok) {
-      if (response.status === 401) {
+      if (response.status === 401 || response.status === 403) {
         throw new Error('Invalid JobTread API key. Check your key in Settings.');
       }
       const text = await response.text().catch(() => '');
@@ -88,19 +88,20 @@ export class JobTreadClient {
 
     const data = await response.json();
     if (data.errors) {
-      throw new Error(`JobTread GraphQL error: ${data.errors.map((e: any) => e.message).join(', ')}`);
+      throw new Error(`JobTread API error: ${data.errors.map((e: any) => e.message).join(', ')}`);
     }
 
     return data.data;
   }
 
-  async testConnection(): Promise<{ ok: boolean; error?: string }> {
+  async testConnection(): Promise<{ ok: boolean; user?: string; error?: string }> {
     if (!this.isLive) {
       return { ok: false, error: 'No API key provided' };
     }
     try {
-      await this.query(`query { viewer { id name email } }`);
-      return { ok: true };
+      // Simple viewer query to validate the API key
+      const data = await this.query(`query { viewer { id name email } }`);
+      return { ok: true, user: data?.viewer?.name || data?.viewer?.email };
     } catch (err: any) {
       return { ok: false, error: err.message };
     }
@@ -109,9 +110,12 @@ export class JobTreadClient {
   async getJobs(status?: string): Promise<Job[]> {
     if (!this.isLive) return getMockJobs();
 
+    // JobTread API: query jobs with optional status filter
+    // Uses the actual api.jobtread.com endpoint
+    const filterArg = status ? `(filter: { status: "${status}" }, first: 50)` : '(first: 50)';
     const graphqlQuery = `
-      query GetJobs($status: String) {
-        jobs(filter: { status: $status }, first: 50, orderBy: { field: "updatedAt", direction: DESC }) {
+      query {
+        jobs${filterArg} {
           edges {
             node {
               id
@@ -131,11 +135,11 @@ export class JobTreadClient {
       }
     `;
 
-    const data = await this.query(graphqlQuery, { status });
+    const data = await this.query(graphqlQuery);
     return (data?.jobs?.edges || []).map((edge: any) => ({
       id: edge.node.id,
-      name: edge.node.name,
-      status: edge.node.status,
+      name: edge.node.name || 'Untitled Job',
+      status: edge.node.status || 'Unknown',
       customer: edge.node.customer?.name || 'Unknown',
       address: edge.node.location?.formattedAddress || '',
       estimatedRevenue: edge.node.estimatedRevenue || 0,
@@ -151,46 +155,66 @@ export class JobTreadClient {
   async getLeads(): Promise<Lead[]> {
     if (!this.isLive) return getMockLeads();
 
-    const data = await this.query(`
-      query GetLeads {
-        contacts(filter: { type: "lead" }, first: 20, orderBy: { field: "createdAt", direction: DESC }) {
+    // JobTread: leads are customers at an early pipeline stage, not a separate "contacts" entity
+    const graphqlQuery = `
+      query {
+        customers(first: 20) {
           edges {
             node {
               id
               name
-              email
-              phone
-              source
-              status
+              contacts(first: 1) {
+                edges {
+                  node {
+                    email
+                    phone
+                  }
+                }
+              }
+              jobs(first: 1) {
+                edges {
+                  node {
+                    status
+                    estimatedRevenue
+                  }
+                }
+              }
               createdAt
             }
           }
         }
       }
-    `);
-    return (data?.contacts?.edges || []).map((edge: any) => ({
-      id: edge.node.id,
-      name: edge.node.name,
-      email: edge.node.email || '',
-      phone: edge.node.phone || '',
-      source: edge.node.source || 'Direct',
-      status: edge.node.status || 'New',
-      estimatedValue: 0,
-      createdAt: edge.node.createdAt,
-      lastContact: edge.node.createdAt,
-    }));
+    `;
+
+    const data = await this.query(graphqlQuery);
+    return (data?.customers?.edges || []).map((edge: any) => {
+      const contact = edge.node.contacts?.edges?.[0]?.node;
+      const job = edge.node.jobs?.edges?.[0]?.node;
+      return {
+        id: edge.node.id,
+        name: edge.node.name || 'Unknown',
+        email: contact?.email || '',
+        phone: contact?.phone || '',
+        source: 'Direct',
+        status: job?.status || 'New',
+        estimatedValue: job?.estimatedRevenue || 0,
+        createdAt: edge.node.createdAt || '',
+        lastContact: edge.node.createdAt || '',
+      };
+    });
   }
 
   async getSchedule(startDate: string, endDate: string): Promise<ScheduleEvent[]> {
     if (!this.isLive) return getMockSchedule();
 
-    const data = await this.query(`
-      query GetSchedule($startDate: Date!, $endDate: Date!) {
-        events(filter: { startDate: { gte: $startDate }, endDate: { lte: $endDate } }, first: 50) {
+    // JobTread: scheduling entity is "tasks", not "events"
+    const graphqlQuery = `
+      query($startDate: String!, $endDate: String!) {
+        tasks(filter: { startDate: { gte: $startDate }, endDate: { lte: $endDate } }, first: 50) {
           edges {
             node {
               id
-              title
+              name
               job { name }
               assignees { name }
               startDate
@@ -201,14 +225,16 @@ export class JobTreadClient {
           }
         }
       }
-    `, { startDate, endDate });
-    return (data?.events?.edges || []).map((edge: any) => ({
+    `;
+
+    const data = await this.query(graphqlQuery, { startDate, endDate });
+    return (data?.tasks?.edges || []).map((edge: any) => ({
       id: edge.node.id,
-      title: edge.node.title,
+      title: edge.node.name || 'Untitled Task',
       jobName: edge.node.job?.name || '',
       crewMembers: (edge.node.assignees || []).map((a: any) => a.name),
-      startDate: edge.node.startDate,
-      endDate: edge.node.endDate,
+      startDate: edge.node.startDate || '',
+      endDate: edge.node.endDate || '',
       status: edge.node.status || 'scheduled',
       type: edge.node.type || 'task',
     }));
@@ -217,23 +243,103 @@ export class JobTreadClient {
   async getFinancialSummary(): Promise<FinancialSummary> {
     if (!this.isLive) return getMockFinancials();
 
-    const data = await this.query(`
-      query GetFinancials {
-        financialSummary {
-          totalRevenue
-          totalCosts
-          grossProfit
-          grossMargin
-          openInvoices
-          overdueInvoices
+    // JobTread: no single "financialSummary" endpoint — compute from job-level data and documents
+    const graphqlQuery = `
+      query {
+        jobs(first: 100) {
+          edges {
+            node {
+              estimatedRevenue
+              actualRevenue
+              estimatedCost
+              actualCost
+            }
+          }
+        }
+        documents(filter: { type: "invoice" }, first: 100) {
+          edges {
+            node {
+              status
+              total
+              dueDate
+            }
+          }
         }
       }
-    `);
-    return data.financialSummary;
+    `;
+
+    try {
+      const data = await this.query(graphqlQuery);
+
+      const jobs = data?.jobs?.edges || [];
+      const documents = data?.documents?.edges || [];
+
+      let totalRevenue = 0;
+      let totalCosts = 0;
+
+      for (const edge of jobs) {
+        totalRevenue += edge.node.actualRevenue || edge.node.estimatedRevenue || 0;
+        totalCosts += edge.node.actualCost || edge.node.estimatedCost || 0;
+      }
+
+      const grossProfit = totalRevenue - totalCosts;
+      const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+
+      let openInvoices = 0;
+      let overdueInvoices = 0;
+      let cashInFlow = 0;
+      let cashOutFlow = totalCosts;
+      const today = new Date().toISOString().split('T')[0];
+
+      for (const edge of documents) {
+        const doc = edge.node;
+        if (doc.status === 'paid') {
+          cashInFlow += doc.total || 0;
+        } else if (doc.status === 'sent' || doc.status === 'open') {
+          openInvoices++;
+          if (doc.dueDate && doc.dueDate < today) {
+            overdueInvoices++;
+          }
+        }
+      }
+
+      return { totalRevenue, totalCosts, grossProfit, grossMargin, openInvoices, overdueInvoices, cashInFlow, cashOutFlow };
+    } catch {
+      // If the documents query fails (field doesn't exist), fall back to jobs-only summary
+      const jobsQuery = `
+        query {
+          jobs(first: 100) {
+            edges {
+              node {
+                estimatedRevenue
+                actualRevenue
+                estimatedCost
+                actualCost
+              }
+            }
+          }
+        }
+      `;
+      const data = await this.query(jobsQuery);
+      const jobs = data?.jobs?.edges || [];
+
+      let totalRevenue = 0;
+      let totalCosts = 0;
+
+      for (const edge of jobs) {
+        totalRevenue += edge.node.actualRevenue || edge.node.estimatedRevenue || 0;
+        totalCosts += edge.node.actualCost || edge.node.estimatedCost || 0;
+      }
+
+      const grossProfit = totalRevenue - totalCosts;
+      const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+
+      return { totalRevenue, totalCosts, grossProfit, grossMargin, openInvoices: 0, overdueInvoices: 0, cashInFlow: totalRevenue, cashOutFlow: totalCosts };
+    }
   }
 }
 
-// Static mock data functions (no demo fallback on errors — only used when no key is set)
+// Static mock data functions (only used when no API key is set)
 export function getMockJobs(): Job[] {
   return [
     {
