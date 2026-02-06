@@ -72,13 +72,23 @@ Generate a complete, accurate estimate ready to present to the customer.`;
     });
 
     const textContent = response.content.find((block) => block.type === 'text');
-    const text = textContent?.text || '{}';
+    let text = (textContent?.text || '').trim();
+
+    // Strip markdown code fences if Claude wrapped the JSON
+    text = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+
+    if (!text) {
+      return NextResponse.json({ error: 'AI returned an empty response. Please try again.' }, { status: 500 });
+    }
 
     try {
       const estimate = JSON.parse(text);
       return NextResponse.json({ estimate });
     } catch {
-      return NextResponse.json({ estimate: null, rawText: text });
+      return NextResponse.json(
+        { error: 'AI returned an invalid format. Please try again.' },
+        { status: 500 }
+      );
     }
   } catch (error: any) {
     console.error('Estimate error:', error);
