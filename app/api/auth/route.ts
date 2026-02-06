@@ -22,10 +22,11 @@ export async function POST(req: NextRequest) {
       }
 
       const existing = findUserByEmail(email);
-      if (existing) {
+      if (existing && existing.passwordHash) {
         return NextResponse.json({ error: 'Email already registered' }, { status: 409 });
       }
 
+      // Create new user, or re-register a user restored from JWT (empty passwordHash after cold start)
       const user = createUser(email, password, name, company);
       const token = createToken({ id: user.id, email: user.email, name: user.name, company: user.company });
 
