@@ -52,22 +52,33 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     }
   };
 
-  // Quick demo login
+  // Quick demo login — uses a fixed demo account; registers on first use, logs in after
   const handleDemoLogin = async () => {
     setLoading(true);
+    setError('');
+    const demoCredentials = {
+      email: 'demo@betterboss.ai',
+      password: 'demo1234',
+      name: 'Demo Contractor',
+      company: 'Demo Roofing Co.',
+    };
+
     try {
-      // Register a demo user
-      const res = await fetch('/api/auth', {
+      // Try login first (account may already exist)
+      let res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'register',
-          email: `demo-${Date.now()}@betterboss.ai`,
-          password: 'demo1234',
-          name: 'Demo Contractor',
-          company: 'Demo Roofing Co.',
-        }),
+        body: JSON.stringify({ action: 'login', ...demoCredentials }),
       });
+
+      if (!res.ok) {
+        // Account doesn't exist yet — register it
+        res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'register', ...demoCredentials }),
+        });
+      }
 
       const data = await res.json();
       if (!res.ok) {

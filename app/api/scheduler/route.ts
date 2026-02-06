@@ -67,13 +67,23 @@ Generate a detailed, optimized schedule that maximizes crew utilization and mini
     });
 
     const textContent = response.content.find((block) => block.type === 'text');
-    const text = textContent?.text || '{}';
+    let text = (textContent?.text || '').trim();
+
+    // Strip markdown code fences if Claude wrapped the JSON
+    text = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+
+    if (!text) {
+      return NextResponse.json({ error: 'AI returned an empty response. Please try again.' }, { status: 500 });
+    }
 
     try {
       const schedule = JSON.parse(text);
       return NextResponse.json({ schedule });
     } catch {
-      return NextResponse.json({ schedule: null, rawText: text });
+      return NextResponse.json(
+        { error: 'AI returned an invalid format. Please try again.' },
+        { status: 500 }
+      );
     }
   } catch (error: any) {
     console.error('Scheduler error:', error);

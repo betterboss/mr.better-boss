@@ -3,8 +3,7 @@ export const APP_TAGLINE = 'Your AI-Powered JobTread Command Center';
 export const APP_VERSION = '1.0.0';
 export const COMPANY_NAME = 'Better Boss';
 export const COMPANY_URL = 'https://better-boss.ai';
-export const JOBTREAD_API_BASE = 'https://app.jobtread.com/api';
-export const JOBTREAD_GRAPHQL_URL = 'https://app.jobtread.com/graphql';
+export const JOBTREAD_API_URL = 'https://api.jobtread.com/';
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'mr-better-boss-jwt-secret-change-in-production';
 export const JWT_EXPIRY = '7d';

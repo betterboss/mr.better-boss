@@ -155,8 +155,8 @@ export default function SettingsPanel({
               className="boss-input text-sm"
             />
             <p className="text-[10px] text-gray-500 mt-1">
-              Found at app.jobtread.com &rarr; Settings &rarr; API.
-              Connects live job, financial, and schedule data.
+              Found at app.jobtread.com &rarr; Settings &rarr; API Keys.
+              Connects to api.jobtread.com for live job, financial, and schedule data.
             </p>
 
             {/* Status indicator */}
