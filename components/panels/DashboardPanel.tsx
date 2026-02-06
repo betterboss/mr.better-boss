@@ -14,6 +14,8 @@ interface DashboardPanelProps {
   user: { name: string; company: string };
   dashboardData: any;
   dataLoading: boolean;
+  dataError?: string | null;
+  isDemo?: boolean;
   onRefresh: () => void;
   settings: any;
 }
@@ -53,6 +55,8 @@ export default function DashboardPanel({
   user,
   dashboardData,
   dataLoading,
+  dataError,
+  isDemo,
   onRefresh,
 }: DashboardPanelProps) {
   const jobs = dashboardData?.jobs || [];
@@ -105,6 +109,32 @@ export default function DashboardPanel({
           Refresh
         </button>
       </div>
+
+      {/* Error Banner */}
+      {dataError && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start gap-3">
+          <AlertTriangleIcon size={16} className="text-red-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-red-400">Connection Error</p>
+            <p className="text-xs text-gray-400 mt-0.5">{dataError}</p>
+            <p className="text-[10px] text-gray-500 mt-1">
+              Check your JobTread API key in Settings.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Demo Banner */}
+      {isDemo && !dataError && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
+          <p className="text-xs font-medium text-yellow-400">
+            Viewing sample data
+          </p>
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            Add your JobTread API key in Settings to see your real jobs, leads, and financials.
+          </p>
+        </div>
+      )}
 
       {/* Key Metrics Row */}
       <div className="grid grid-cols-2 gap-3">

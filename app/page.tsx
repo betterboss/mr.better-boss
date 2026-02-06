@@ -28,31 +28,54 @@ export default function Home() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check for existing session on mount
+  // Check for existing session on mount — verify JWT with server
   useEffect(() => {
-    const savedToken = localStorage.getItem('mrbb_token');
-    const savedUser = localStorage.getItem('mrbb_user');
-    const savedSettings = localStorage.getItem('mrbb_settings');
+    async function restoreSession() {
+      const savedToken = localStorage.getItem('mrbb_token');
+      const savedUser = localStorage.getItem('mrbb_user');
+      const savedSettings = localStorage.getItem('mrbb_settings');
 
-    if (savedToken && savedUser) {
-      try {
-        setToken(savedToken);
-        setUser(JSON.parse(savedUser));
-      } catch {
-        localStorage.removeItem('mrbb_token');
-        localStorage.removeItem('mrbb_user');
+      if (savedSettings) {
+        try {
+          setSettings((prev) => ({ ...prev, ...JSON.parse(savedSettings) }));
+        } catch {
+          // ignore
+        }
       }
-    }
 
-    if (savedSettings) {
-      try {
-        setSettings((prev) => ({ ...prev, ...JSON.parse(savedSettings) }));
-      } catch {
-        // ignore
+      if (savedToken && savedUser) {
+        try {
+          // Verify token with server (also re-creates user record if server restarted)
+          const res = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'verify', token: savedToken }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            setToken(savedToken);
+            setUser(data.user);
+          } else {
+            // Token invalid/expired — clear session
+            localStorage.removeItem('mrbb_token');
+            localStorage.removeItem('mrbb_user');
+          }
+        } catch {
+          // Network error — still trust localStorage for offline usage
+          try {
+            setToken(savedToken);
+            setUser(JSON.parse(savedUser));
+          } catch {
+            localStorage.removeItem('mrbb_token');
+            localStorage.removeItem('mrbb_user');
+          }
+        }
       }
-    }
 
-    setIsLoading(false);
+      setIsLoading(false);
+    }
+    restoreSession();
   }, []);
 
   const handleLogin = useCallback((authToken: string, authUser: AuthUser) => {

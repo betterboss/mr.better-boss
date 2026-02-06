@@ -6,6 +6,7 @@ import {
   createToken,
   verifyToken,
   updateUserApiKeys,
+  ensureUser,
 } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
@@ -42,8 +43,22 @@ export async function POST(req: NextRequest) {
       }
 
       const user = findUserByEmail(email);
-      if (!user || !verifyPassword(password, user.passwordHash)) {
-        return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+      if (!user) {
+        return NextResponse.json(
+          { error: 'Account not found. Please create an account first.' },
+          { status: 401 }
+        );
+      }
+
+      if (!user.passwordHash) {
+        return NextResponse.json(
+          { error: 'Session expired. Please create a new account.' },
+          { status: 401 }
+        );
+      }
+
+      if (!verifyPassword(password, user.passwordHash)) {
+        return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
       }
 
       const token = createToken({ id: user.id, email: user.email, name: user.name, company: user.company });
@@ -67,6 +82,8 @@ export async function POST(req: NextRequest) {
       if (!payload) {
         return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
       }
+      // Re-create user record in memory if lost after server restart
+      ensureUser(payload);
       return NextResponse.json({ user: payload });
     }
 
@@ -77,6 +94,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
 
+      // Ensure user record exists before updating keys
+      ensureUser(payload);
       const user = updateUserApiKeys(payload.email, jobtreadApiKey, anthropicApiKey);
       if (!user) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 });

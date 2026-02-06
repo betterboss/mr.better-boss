@@ -6,18 +6,31 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action, jobtreadApiKey, params } = body;
 
-    // Use demo data if no API key provided
-    const client = createJobTreadClient(jobtreadApiKey || 'demo');
+    const hasKey = !!jobtreadApiKey && jobtreadApiKey.length > 0;
+    const client = createJobTreadClient(hasKey ? jobtreadApiKey : '');
 
     switch (action) {
+      case 'testConnection': {
+        if (!hasKey) {
+          return NextResponse.json({
+            ok: false,
+            error: 'No JobTread API key provided. Add your key in Settings.',
+          });
+        }
+        const result = await client.testConnection();
+        return NextResponse.json(result);
+      }
+
       case 'getJobs': {
         const jobs = await client.getJobs(params?.status);
-        return NextResponse.json({ jobs });
+        return NextResponse.json({ jobs, isDemo: !hasKey });
       }
+
       case 'getLeads': {
         const leads = await client.getLeads();
-        return NextResponse.json({ leads });
+        return NextResponse.json({ leads, isDemo: !hasKey });
       }
+
       case 'getSchedule': {
         const today = new Date();
         const startDate = params?.startDate || today.toISOString().split('T')[0];
@@ -25,12 +38,14 @@ export async function POST(req: NextRequest) {
         endOfWeek.setDate(endOfWeek.getDate() + 7);
         const endDate = params?.endDate || endOfWeek.toISOString().split('T')[0];
         const schedule = await client.getSchedule(startDate, endDate);
-        return NextResponse.json({ schedule });
+        return NextResponse.json({ schedule, isDemo: !hasKey });
       }
+
       case 'getFinancials': {
         const financials = await client.getFinancialSummary();
-        return NextResponse.json({ financials });
+        return NextResponse.json({ financials, isDemo: !hasKey });
       }
+
       case 'getDashboard': {
         const [jobs, leads, schedule, financials] = await Promise.all([
           client.getJobs(),
@@ -41,15 +56,16 @@ export async function POST(req: NextRequest) {
           ),
           client.getFinancialSummary(),
         ]);
-        return NextResponse.json({ jobs, leads, schedule, financials });
+        return NextResponse.json({ jobs, leads, schedule, financials, isDemo: !hasKey });
       }
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error: any) {
     console.error('JobTread API error:', error);
     return NextResponse.json(
-      { error: error?.message || 'JobTread API error' },
+      { error: error?.message || 'JobTread API error. Check your API key in Settings.' },
       { status: 500 }
     );
   }

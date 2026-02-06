@@ -7,10 +7,12 @@ import {
   LogOutIcon,
   CheckCircleIcon,
   BoltIcon,
+  AlertTriangleIcon,
 } from '../Icons';
 
 interface SettingsPanelProps {
   user: { id: string; email: string; name: string; company: string };
+  token: string;
   settings: {
     jobtreadApiKey: string;
     anthropicApiKey: string;
@@ -22,6 +24,7 @@ interface SettingsPanelProps {
 
 export default function SettingsPanel({
   user,
+  token,
   settings,
   onSettingsChange,
   onLogout,
@@ -29,6 +32,10 @@ export default function SettingsPanel({
   const [jobtreadKey, setJobtreadKey] = useState(settings.jobtreadApiKey);
   const [anthropicKey, setAnthropicKey] = useState(settings.anthropicApiKey);
   const [saved, setSaved] = useState(false);
+  const [jtStatus, setJtStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [jtError, setJtError] = useState('');
+  const [aiStatus, setAiStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [aiError, setAiError] = useState('');
 
   const handleSave = () => {
     onSettingsChange({
@@ -37,6 +44,63 @@ export default function SettingsPanel({
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const testJobTreadConnection = async () => {
+    if (!jobtreadKey.trim()) {
+      setJtStatus('error');
+      setJtError('Enter a JobTread API key first');
+      return;
+    }
+    setJtStatus('testing');
+    setJtError('');
+    try {
+      const res = await fetch('/api/jobtread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'testConnection', jobtreadApiKey: jobtreadKey }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setJtStatus('ok');
+      } else {
+        setJtStatus('error');
+        setJtError(data.error || 'Connection failed');
+      }
+    } catch {
+      setJtStatus('error');
+      setJtError('Network error testing JobTread connection');
+    }
+  };
+
+  const testAnthropicConnection = async () => {
+    if (!anthropicKey.trim()) {
+      setAiStatus('error');
+      setAiError('Enter an Anthropic API key first');
+      return;
+    }
+    setAiStatus('testing');
+    setAiError('');
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          anthropicApiKey: anthropicKey,
+          messages: [{ role: 'user', content: 'Say "connected" in one word.' }],
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.reply) {
+        setAiStatus('ok');
+      } else {
+        setAiStatus('error');
+        setAiError(data.error || 'Connection failed');
+      }
+    } catch {
+      setAiStatus('error');
+      setAiError('Network error testing Anthropic connection');
+    }
   };
 
   return (
@@ -78,6 +142,7 @@ export default function SettingsPanel({
         </h3>
 
         <div className="space-y-4">
+          {/* JobTread API Key */}
           <div>
             <label className="block text-xs font-medium text-gray-300 mb-1">
               JobTread API Key
@@ -85,7 +150,7 @@ export default function SettingsPanel({
             <input
               type="password"
               value={jobtreadKey}
-              onChange={(e) => setJobtreadKey(e.target.value)}
+              onChange={(e) => { setJobtreadKey(e.target.value); setJtStatus('idle'); }}
               placeholder="Enter your JobTread API key"
               className="boss-input text-sm"
             />
@@ -93,14 +158,44 @@ export default function SettingsPanel({
               Found at app.jobtread.com &rarr; Settings &rarr; API.
               Connects live job, financial, and schedule data.
             </p>
-            {settings.jobtreadApiKey && (
+
+            {/* Status indicator */}
+            {jtStatus === 'ok' && (
               <div className="flex items-center gap-1 mt-1">
                 <CheckCircleIcon size={12} className="text-green-400" />
-                <span className="text-[10px] text-green-400">Connected</span>
+                <span className="text-[10px] text-green-400">Connected to JobTread</span>
               </div>
             )}
+            {jtStatus === 'error' && (
+              <div className="flex items-center gap-1 mt-1">
+                <AlertTriangleIcon size={12} className="text-red-400" />
+                <span className="text-[10px] text-red-400">{jtError}</span>
+              </div>
+            )}
+            {settings.jobtreadApiKey && jtStatus === 'idle' && (
+              <div className="flex items-center gap-1 mt-1">
+                <CheckCircleIcon size={12} className="text-green-400" />
+                <span className="text-[10px] text-green-400">Key saved</span>
+              </div>
+            )}
+
+            <button
+              onClick={testJobTreadConnection}
+              disabled={jtStatus === 'testing' || !jobtreadKey.trim()}
+              className="mt-2 text-xs text-boss-orange hover:text-boss-orange-light disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+            >
+              {jtStatus === 'testing' ? (
+                <>
+                  <div className="spinner !w-3 !h-3" />
+                  Testing...
+                </>
+              ) : (
+                'Test Connection'
+              )}
+            </button>
           </div>
 
+          {/* Anthropic API Key */}
           <div>
             <label className="block text-xs font-medium text-gray-300 mb-1">
               Anthropic API Key
@@ -108,7 +203,7 @@ export default function SettingsPanel({
             <input
               type="password"
               value={anthropicKey}
-              onChange={(e) => setAnthropicKey(e.target.value)}
+              onChange={(e) => { setAnthropicKey(e.target.value); setAiStatus('idle'); }}
               placeholder="sk-ant-..."
               className="boss-input text-sm"
             />
@@ -116,12 +211,40 @@ export default function SettingsPanel({
               Get yours at console.anthropic.com. Powers AI estimates,
               smart scheduling, and the assistant.
             </p>
-            {settings.anthropicApiKey && (
+
+            {aiStatus === 'ok' && (
               <div className="flex items-center gap-1 mt-1">
                 <CheckCircleIcon size={12} className="text-green-400" />
-                <span className="text-[10px] text-green-400">Connected</span>
+                <span className="text-[10px] text-green-400">Connected to Claude AI</span>
               </div>
             )}
+            {aiStatus === 'error' && (
+              <div className="flex items-center gap-1 mt-1">
+                <AlertTriangleIcon size={12} className="text-red-400" />
+                <span className="text-[10px] text-red-400">{aiError}</span>
+              </div>
+            )}
+            {settings.anthropicApiKey && aiStatus === 'idle' && (
+              <div className="flex items-center gap-1 mt-1">
+                <CheckCircleIcon size={12} className="text-green-400" />
+                <span className="text-[10px] text-green-400">Key saved</span>
+              </div>
+            )}
+
+            <button
+              onClick={testAnthropicConnection}
+              disabled={aiStatus === 'testing' || !anthropicKey.trim()}
+              className="mt-2 text-xs text-boss-orange hover:text-boss-orange-light disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+            >
+              {aiStatus === 'testing' ? (
+                <>
+                  <div className="spinner !w-3 !h-3" />
+                  Testing...
+                </>
+              ) : (
+                'Test Connection'
+              )}
+            </button>
           </div>
 
           <button

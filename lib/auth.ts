@@ -20,8 +20,10 @@ export interface StoredUser {
   createdAt: string;
 }
 
-// In-memory user store (in production, use a database)
-// For this sidebar app, localStorage on client + JWT is sufficient
+// In-memory user store. Resets on server restart, which is fine because:
+// 1. Session restore uses JWT (self-contained, no DB lookup needed)
+// 2. Register creates a new entry
+// 3. Login requires the entry to exist (user must re-register after restart, or use saved JWT)
 const users: Map<string, StoredUser> = new Map();
 
 export function hashPassword(password: string): string {
@@ -61,6 +63,24 @@ export function createUser(
     name,
     company,
     passwordHash: hashPassword(password),
+    createdAt: new Date().toISOString(),
+  };
+  users.set(user.email, user);
+  return user;
+}
+
+// Ensure a user record exists in memory (for after server restart)
+// This allows API key storage to work even after the in-memory map resets
+export function ensureUser(payload: UserPayload): StoredUser {
+  const existing = users.get(payload.email.toLowerCase());
+  if (existing) return existing;
+
+  const user: StoredUser = {
+    id: payload.id,
+    email: payload.email.toLowerCase(),
+    name: payload.name,
+    company: payload.company,
+    passwordHash: '',
     createdAt: new Date().toISOString(),
   };
   users.set(user.email, user);

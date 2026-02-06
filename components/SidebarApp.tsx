@@ -32,9 +32,12 @@ export default function SidebarApp({
   const [activePanel, setActivePanel] = useState<PanelId>('dashboard');
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [isDemo, setIsDemo] = useState(true);
 
   const fetchDashboardData = useCallback(async () => {
     setDataLoading(true);
+    setDataError(null);
     try {
       const res = await fetch('/api/jobtread', {
         method: 'POST',
@@ -45,9 +48,18 @@ export default function SidebarApp({
         }),
       });
       const data = await res.json();
-      setDashboardData(data);
+      if (!res.ok) {
+        setDataError(data.error || 'Failed to load data from JobTread');
+        setIsDemo(true);
+      } else {
+        setDashboardData(data);
+        setIsDemo(data.isDemo ?? !settings.jobtreadApiKey);
+        setDataError(null);
+      }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
+      setDataError('Network error loading data');
+      setIsDemo(true);
     } finally {
       setDataLoading(false);
     }
@@ -65,6 +77,8 @@ export default function SidebarApp({
       settings,
       dashboardData,
       dataLoading,
+      dataError,
+      isDemo,
       onRefresh: fetchDashboardData,
     };
 
@@ -83,6 +97,7 @@ export default function SidebarApp({
         return (
           <SettingsPanel
             user={user}
+            token={token}
             settings={settings}
             onSettingsChange={onSettingsChange}
             onLogout={onLogout}
@@ -117,10 +132,22 @@ export default function SidebarApp({
 
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${settings.jobtreadApiKey ? 'bg-boss-success pulse-dot' : 'bg-yellow-500'}`} />
-            <span className="text-[10px] text-gray-400">
-              {settings.jobtreadApiKey ? 'Live' : 'Demo'}
-            </span>
+            {dataError ? (
+              <>
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-[10px] text-red-400">Error</span>
+              </>
+            ) : isDemo ? (
+              <>
+                <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                <span className="text-[10px] text-yellow-400">Demo</span>
+              </>
+            ) : (
+              <>
+                <div className="w-2 h-2 rounded-full bg-boss-success pulse-dot" />
+                <span className="text-[10px] text-green-400">Live</span>
+              </>
+            )}
           </div>
         </div>
       </div>
