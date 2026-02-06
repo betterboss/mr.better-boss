@@ -63,16 +63,25 @@ export class JobTreadClient {
   }
 
   private async query(graphqlQuery: string, variables?: Record<string, unknown>) {
-    const response = await fetch(JOBTREAD_GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({ query: graphqlQuery, variables }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(JOBTREAD_GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({ query: graphqlQuery, variables }),
+      });
+    } catch (err: any) {
+      const msg = err?.cause?.code || err?.message || 'Unknown network error';
+      throw new Error(`Could not connect to JobTread: ${msg}. Check your API key and network connection.`);
+    }
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Invalid JobTread API key. Check your key in Settings.');
+      }
       const text = await response.text().catch(() => '');
       throw new Error(`JobTread API error ${response.status}: ${response.statusText}. ${text}`);
     }

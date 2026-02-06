@@ -88,8 +88,10 @@ export default function Home() {
   const handleLogout = useCallback(() => {
     setToken(null);
     setUser(null);
+    setSettings({ jobtreadApiKey: '', anthropicApiKey: '', sidebarMode: 'fullpage' });
     localStorage.removeItem('mrbb_token');
     localStorage.removeItem('mrbb_user');
+    localStorage.removeItem('mrbb_settings');
   }, []);
 
   const handleSettingsChange = useCallback((newSettings: Partial<AppSettings>) => {
