@@ -15,6 +15,9 @@ export const metadata: Metadata = {
     'Better Boss',
   ],
   authors: [{ name: 'Better Boss', url: 'https://better-boss.ai' }],
+  icons: {
+    icon: '/favicon.svg',
+  },
   openGraph: {
     title: 'Mr. Better Boss | AI-Powered JobTread Sidebar',
     description: 'Your AI-powered JobTread command center for contractors.',

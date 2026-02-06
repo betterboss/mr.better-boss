@@ -56,6 +56,16 @@ export function createUser(
   name: string,
   company: string
 ): StoredUser {
+  // If user was restored from JWT (empty passwordHash), update in place
+  const existing = users.get(email.toLowerCase());
+  if (existing && !existing.passwordHash) {
+    existing.name = name;
+    existing.company = company;
+    existing.passwordHash = hashPassword(password);
+    users.set(existing.email, existing);
+    return existing;
+  }
+
   const id = crypto.randomUUID();
   const user: StoredUser = {
     id,
